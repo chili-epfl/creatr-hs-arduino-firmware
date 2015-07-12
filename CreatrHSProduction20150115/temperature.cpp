@@ -276,11 +276,17 @@ void manage_heater()
 
     #ifndef PID_OPENLOOP
         pid_error[e] = pid_setpoint[e] - pid_input;
-        if(pid_error[e] > 10) {
+
+        //d term is calculated regardless of running PID or not
+        //K1 defined in Configuration.h in the PID settings
+        dTerm[e] = (1.0 - K1)*(Kd*(pid_input - temp_dState[e])) + K1*dTerm[e];
+        temp_dState[e] = pid_input;
+
+        if(pid_error[e] > 30) {
           pid_output = PID_MAX;
           pid_reset[e] = true;
         }
-        else if(pid_error[e] < -10) {
+        else if(pid_error[e] < -30) {
           pid_output = 0;
           pid_reset[e] = true;
         }
@@ -289,14 +295,15 @@ void manage_heater()
             temp_iState[e] = 0.0;
             pid_reset[e] = false;
           }
+
+          //p term
           pTerm[e] = Kp * pid_error[e];
+
+          //i term
           temp_iState[e] += pid_error[e];
           temp_iState[e] = constrain(temp_iState[e], temp_iState_min[e], temp_iState_max[e]);
           iTerm[e] = Ki * temp_iState[e];
-          //K1 defined in Configuration.h in the PID settings
-          #define K2 (1.0-K1)
-          dTerm[e] = (Kd * (pid_input - temp_dState[e]))*K2 + (K1 * dTerm[e]);
-          temp_dState[e] = pid_input;
+
           pid_output = constrain(pTerm[e] + iTerm[e] - dTerm[e], 0, PID_MAX);
         }
     #endif //PID_OPENLOOP
