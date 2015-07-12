@@ -15,8 +15,8 @@
 #define BAUDRATE 250000
 //#define BAUDRATE 115200
 
-#define EXTR2_X_OFFSET 15.00
-#define EXTR2_Y_OFFSET 0.00
+#define EXTR2_X_OFFSET 15.10
+#define EXTR2_Y_OFFSET -0.10
 
 // The following define selects which electronics board you have. Please choose the one that matches your setup
 
