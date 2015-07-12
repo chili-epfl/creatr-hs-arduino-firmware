@@ -22,5 +22,5 @@ flash
 1. Unplug the B type cable from your PC and reconnect the first cable that you unplugged. You may now connect the main cable from the back of the machine to your PC.
 1. In Simplify 3D, under Machine Control Panel, connect to the appropriate serial port (probably looks like **/dev/ttyUSBx**) with 115K baud.
 1. Send `M500` and then `M502` under Communication.
-1. Done (no need to reboot).
+1. Done (reboot might be necessary).
 
