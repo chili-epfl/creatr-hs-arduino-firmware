@@ -93,9 +93,9 @@
 //    #define  DEFAULT_Ki 0.24
 //    #define  DEFAULT_Kd 48.15
 // Creatr HS
-    #define  DEFAULT_Kp 12.68
-    #define  DEFAULT_Ki 0.64
-    #define  DEFAULT_Kd 62.75
+    #define  DEFAULT_Kp 11.0
+    #define  DEFAULT_Ki 0.2
+    #define  DEFAULT_Kd 190.0
 
 
 #endif // PIDTEMP
@@ -187,7 +187,7 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
 
 #define DEFAULT_AXIS_STEPS_PER_UNIT   { (100/3)*2, (100/3)*2, 9600/10, 55.465*2}  //55.465*2 HS Creatr settings for 16 steps all 16 steping. ORIGINAL: 55.465*2
 #define DEFAULT_MAX_FEEDRATE          {800, 800, 10, 10000, 10000}    // (mm/sec) Creatr was 200, 200, 10, 100, 100
-#define DEFAULT_MAX_ACCELERATION      {3000,3000,200, 8000, 8000}    // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
+#define DEFAULT_MAX_ACCELERATION      {800,800,200, 8000, 8000}    // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
 
 #define DEFAULT_ACCELERATION         1000   // X, Y, Z and E max acceleration in mm/s^2 for prinxting moves
 #define DEFAULT_RETRACT_ACCELERATION  8000   // X, Y, Z and E max acceleration in mm/s^2 for r retracts
