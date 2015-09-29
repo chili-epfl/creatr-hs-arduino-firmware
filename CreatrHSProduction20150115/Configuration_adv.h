@@ -152,6 +152,8 @@
 #define N_ARC_CORRECTION 25
 
 const int dropsegments=5; //everything with less than this number of steps will be ignored as move and joined with the next movement
+const int minstep_e=1; //special step lower limit for extruder, movements with extruder steps less than this will be ignored as move and joined with the next movement
+const int zero_e_steps_tolerance=0; //extruder is allowed to go for this much zero steps before needing bail
 
 // If you are using a RAMPS board or cheap E-bay purchased boards that do not detect when an SD card is inserted
 // You can get round this by connecting a push button or single throw switch to the pin defined as SDCARDCARDDETECT 
@@ -171,7 +173,7 @@ const int dropsegments=5; //everything with less than this number of steps will 
 #if defined SDSUPPORT
   #define BLOCK_BUFFER_SIZE 16   // SD,LCD,Buttons take more memory, block buffer needs to be smaller
 #else
-  #define BLOCK_BUFFER_SIZE 16 // maximize block buffer
+  #define BLOCK_BUFFER_SIZE 64 // maximize block buffer
 #endif
 
 

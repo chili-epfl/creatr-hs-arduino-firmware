@@ -77,6 +77,10 @@ unsigned long axis_steps_per_sqr_second[NUM_AXIS];
 
 // The current position of the tool in absolute steps
 long position[4];   //rescaled from extern when axis_steps_per_unit are changed by gcode
+float distance_over_bail; //Total distance of the bailed motions due to not enough extrusion
+float position_x_raw_before_bail, position_y_raw_before_bail, position_z_raw_before_bail, position_e_raw_before_bail; //X, Y, Z, E commands given before bail due to insufficient extruder steps
+float position_x_raw_last, position_y_raw_last, position_z_raw_last, position_e_raw_last; //X, Y, Z, E commands given previously
+int zero_e_steps;  //The tolerance we have left for zero extruder steps
 static float previous_speed[4]; // Speed of previous path line segment
 static float previous_nominal_speed; // Nominal speed of previous path line segment
 
@@ -360,6 +364,16 @@ void plan_init() {
   block_buffer_head = 0;
   block_buffer_tail = 0;
   memset(position, 0, sizeof(position)); // clear position
+  distance_over_bail = 0.0;
+  position_e_raw_before_bail = 0;
+  position_x_raw_before_bail = 0;
+  position_y_raw_before_bail = 0;
+  position_z_raw_before_bail = 0;
+  position_e_raw_last = 0;
+  position_x_raw_last = 0;
+  position_y_raw_last = 0;
+  position_z_raw_last = 0;
+  zero_e_steps = zero_e_steps_tolerance;
   previous_speed[0] = 0.0;
   previous_speed[1] = 0.0;
   previous_speed[2] = 0.0;
@@ -492,6 +506,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
     if(degHotend(active_extruder)<EXTRUDE_MINTEMP && !allow_cold_extrude)
     {
       position[E_AXIS]=target[E_AXIS]; //behave as if the move really took place, but ignore E part
+      position_e_raw_last = e;
       SERIAL_ECHO_START;
       SERIAL_ECHOLNPGM(MSG_ERR_COLD_EXTRUDE_STOP);
     }
@@ -499,6 +514,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
     if(labs(target[E_AXIS]-position[E_AXIS])>axis_steps_per_unit[E_AXIS]*EXTRUDE_MAXLENGTH)
     {
       position[E_AXIS]=target[E_AXIS]; //behave as if the move really took place, but ignore E part
+      position_e_raw_last = e;
       SERIAL_ECHO_START;
       SERIAL_ECHOLNPGM(MSG_ERR_LONG_EXTRUDE_STOP);
     }
@@ -515,9 +531,88 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   block->steps_x = labs(target[X_AXIS]-position[X_AXIS]);
   block->steps_y = labs(target[Y_AXIS]-position[Y_AXIS]);
   block->steps_z = labs(target[Z_AXIS]-position[Z_AXIS]);
-  block->steps_e = labs(target[E_AXIS]-position[E_AXIS]);
-  block->steps_e *= extrudemultiply;
-  block->steps_e /= 100;
+
+  /*
+   * Decide to bail if there is not enough extrusion to cause even a few microsteps, in order to join these bailed blocks
+   */
+
+  //Intentional extrusionless move, just move without extrusion, cancelling previously bailed blocks
+  if(e == position_e_raw_last){
+    block->steps_e = 0;
+    position_x_raw_last = x;
+    position_y_raw_last = y;
+    position_z_raw_last = z;
+    position_e_raw_last = e;
+  }
+
+  //Motionless extrusion
+  else if(x == position_x_raw_last && y == position_y_raw_last && z == position_z_raw_last){
+    block->steps_e = labs(target[E_AXIS] - position[E_AXIS]);
+    block->steps_e *= extrudemultiply;
+    block->steps_e /= 100;
+
+    position_x_raw_last = x;
+    position_y_raw_last = y;
+    position_z_raw_last = z;
+    position_e_raw_last = e;
+
+    zero_e_steps += block->steps_e;
+    if(zero_e_steps > zero_e_steps_tolerance){
+      zero_e_steps = zero_e_steps_tolerance;
+    }
+  }
+
+  //Move has at least some extrusion
+  else{
+
+    //Update the total distance over bail (or without bail for that matter)
+    float tx = x - position_x_raw_last;
+    float ty = y - position_y_raw_last;
+    float tz = z - position_z_raw_last;
+    distance_over_bail += sqrt(tx*tx + ty*ty + tz*tz);
+    position_x_raw_last = x;
+    position_y_raw_last = y;
+    position_z_raw_last = z;
+    position_e_raw_last = e;
+
+    //Update block->steps_e
+    tx = x - position_x_raw_before_bail;
+    ty = y - position_y_raw_before_bail;
+    tz = z - position_z_raw_before_bail;
+    long new_steps_e = lround(axis_steps_per_unit[E_AXIS]*((e - position_e_raw_before_bail)*(sqrt(tx*tx + ty*ty + tz*tz)/distance_over_bail)));
+    block->steps_e = labs(new_steps_e);
+    block->steps_e *= extrudemultiply;
+    block->steps_e /= 100;
+
+    //Not enough extrusion yet, check whether we must bail
+    if(block->steps_e < minstep_e){
+
+      //We don't have enough tolerance, we must bail
+      if(zero_e_steps <= 0){
+        return;
+      }
+
+      //If we don't bail, decrease tolerance for future
+      zero_e_steps -= (block->steps_e + 1);
+    }
+
+    //Regular extrusion
+    else{
+      zero_e_steps += block->steps_e;
+      if(zero_e_steps > zero_e_steps_tolerance){
+        zero_e_steps = zero_e_steps_tolerance;
+      }
+    }
+
+    //Fix current position so we don't break it by shrinking the extruded amount
+    position[E_AXIS] = target[E_AXIS] - new_steps_e;
+  }
+  distance_over_bail = 0.0;
+  position_e_raw_before_bail = e;
+  position_x_raw_before_bail = x;
+  position_y_raw_before_bail = y;
+  position_z_raw_before_bail = z;
+
   block->step_event_count = max(block->steps_x, max(block->steps_y, max(block->steps_z, block->steps_e)));
 
   // Bail if this is a zero-length block
@@ -788,7 +883,15 @@ void plan_set_position(const float &x, const float &y, const float &z, const flo
   position[X_AXIS] = lround(x*axis_steps_per_unit[X_AXIS]);
   position[Y_AXIS] = lround(y*axis_steps_per_unit[Y_AXIS]);
   position[Z_AXIS] = lround(z*axis_steps_per_unit[Z_AXIS]);     
-  position[E_AXIS] = lround(e*axis_steps_per_unit[E_AXIS]);  
+  position[E_AXIS] = lround(e*axis_steps_per_unit[E_AXIS]);
+  position_x_raw_last = x;
+  position_y_raw_last = y;
+  position_z_raw_last = z;
+  position_e_raw_last = e;
+  position_x_raw_before_bail = x;
+  position_y_raw_before_bail = y;
+  position_z_raw_before_bail = z;
+  position_e_raw_before_bail = e;
   st_set_position(position[X_AXIS], position[Y_AXIS], position[Z_AXIS], position[E_AXIS]);
   previous_nominal_speed = 0.0; // Resets planner junction speeds. Assumes start from rest.
   previous_speed[0] = 0.0;
@@ -799,7 +902,9 @@ void plan_set_position(const float &x, const float &y, const float &z, const flo
 
 void plan_set_e_position(const float &e)
 {
-  position[E_AXIS] = lround(e*axis_steps_per_unit[E_AXIS]);  
+  position[E_AXIS] = lround(e*axis_steps_per_unit[E_AXIS]);
+  position_e_raw_last = e;
+  position_e_raw_before_bail = e;
   st_set_e_position(position[E_AXIS]);
 }
 
